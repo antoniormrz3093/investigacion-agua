@@ -1,0 +1,18 @@
+{
+  "outputDir": "./output",
+  "newsDir": "C:\\ruta\\a\\tu\\carpeta\\de\\informacion",
+  "telegram": {
+    "botToken": "TU_TOKEN_AQUI",
+    "chatId": "TU_CHAT_ID_AQUI"
+  },
+  "keywords": [
+    "agua México reforma",
+    "CONAGUA 2026",
+    "ley aguas nacionales",
+    "tratamiento aguas México",
+    "infraestructura hidráulica México",
+    "concesiones agua México",
+    "sector hídrico México"
+  ],
+  "maxNewsPerSource": 15
+}

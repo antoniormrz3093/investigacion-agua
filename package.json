@@ -1,0 +1,24 @@
+{
+  "name": "monitoreo-agua-mexico",
+  "version": "1.0.0",
+  "description": "Monitoreo automatizado de noticias del sector hídrico en México",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node src/index.js --dry-run"
+  },
+  "keywords": [
+    "agua",
+    "mexico",
+    "noticias",
+    "conagua",
+    "monitoreo"
+  ],
+  "license": "UNLICENSED",
+  "private": true,
+  "dependencies": {
+    "cheerio": "^1.2.0",
+    "rss-parser": "^3.13.0"
+  }
+}
