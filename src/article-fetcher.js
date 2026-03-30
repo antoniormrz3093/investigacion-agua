@@ -8,31 +8,53 @@ function isGoogleNewsUrl(url) {
 }
 
 /**
- * Splits a description string into lines suitable for display.
+ * Resolves a Google News redirect URL to the real article URL
+ * by searching DuckDuckGo for the article title + source.
  */
-function descriptionToLines(description) {
-  if (!description) return [];
-  // Split long description into ~80 char lines on word boundaries
-  const words = description.split(/\s+/);
-  const lines = [];
-  let current = '';
-  for (const word of words) {
-    if (current.length + word.length + 1 > 80 && current.length > 0) {
-      lines.push(current);
-      current = word;
-    } else {
-      current = current ? current + ' ' + word : word;
+async function resolveGoogleNewsUrl(title, source) {
+  if (!title) return null;
+
+  // Clean title: remove " - SourceName" suffix that Google News adds
+  const cleanTitle = title.replace(/ - [^-]+$/, '').trim();
+  const query = encodeURIComponent(cleanTitle + ' ' + (source || ''));
+  const searchUrl = 'https://html.duckduckgo.com/html/?q=' + query;
+
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
+
+    const res = await fetch(searchUrl, {
+      signal: controller.signal,
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+    });
+
+    clearTimeout(timer);
+    if (!res.ok) return null;
+
+    const html = await res.text();
+    const $ = cheerio.load(html);
+
+    // Get the first result URL
+    const firstHref = $('.result__a').first().attr('href') || '';
+    const urlMatch = firstHref.match(/uddg=([^&]+)/);
+    const resolvedUrl = urlMatch ? decodeURIComponent(urlMatch[1]) : firstHref;
+
+    // Skip if it's still a Google News URL or empty
+    if (!resolvedUrl || isGoogleNewsUrl(resolvedUrl) || resolvedUrl.includes('google.com')) {
+      return null;
     }
+
+    return resolvedUrl;
+  } catch {
+    return null;
   }
-  if (current) lines.push(current);
-  return lines.slice(0, 7);
 }
 
 /**
  * Fetches article content from a URL and extracts the first 7 meaningful lines.
  */
-export async function fetchArticleContent(url, timeoutMs = 5000) {
-  if (!url || isGoogleNewsUrl(url)) return [];
+export async function fetchArticleContent(url, timeoutMs = 8000) {
+  if (!url) return [];
 
   try {
     const controller = new AbortController();
@@ -58,7 +80,7 @@ export async function fetchArticleContent(url, timeoutMs = 5000) {
 
     // Try to find article content in order of specificity
     let text = '';
-    for (const selector of ['article', '[role="main"]', 'main', '.content', '.entry-content', '.post-content', '.article-body', 'body']) {
+    for (const selector of ['article', '[role="main"]', 'main', '.content', '.entry-content', '.post-content', '.article-body', '.field--name-body', 'body']) {
       const el = $(selector).first();
       if (el.length) {
         text = el.text();
@@ -82,8 +104,8 @@ export async function fetchArticleContent(url, timeoutMs = 5000) {
 
 /**
  * Fetches content for multiple articles (top 5).
- * Falls back to description for Google News articles.
- * Returns a Map of URL -> string[] (lines).
+ * Resolves Google News URLs via DuckDuckGo, then fetches real content.
+ * Returns a Map of original URL -> { lines: string[], realUrl: string|null }.
  */
 export async function fetchTopArticlesContent(articles) {
   const results = new Map();
@@ -92,14 +114,22 @@ export async function fetchTopArticlesContent(articles) {
     const url = item.link || item.enlace || '';
     if (!url) return;
 
-    // Try fetching the real article content
-    let lines = await fetchArticleContent(url);
+    let realUrl = url;
+    let lines = [];
 
-    // Fallback: use description from RSS/scraping
-    if (lines.length === 0) {
-      const desc = item.description || item.descripcion || '';
-      lines = descriptionToLines(desc);
+    // Resolve Google News URLs to real article URLs
+    if (isGoogleNewsUrl(url)) {
+      const title = item.title || item.titulo || '';
+      const source = item.source || item.fuente || '';
+      const resolved = await resolveGoogleNewsUrl(title, source);
+      if (resolved) {
+        realUrl = resolved;
+        console.log(`    Resuelto: ${source} -> ${resolved.substring(0, 80)}...`);
+      }
     }
+
+    // Fetch actual article content
+    lines = await fetchArticleContent(realUrl);
 
     results.set(url, lines);
   });

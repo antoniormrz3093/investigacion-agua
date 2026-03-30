@@ -244,69 +244,92 @@ function classifyArticle(item) {
 }
 
 /**
- * Generates 3-5 bullet points summarizing an article from its content lines.
- * Uses keyword extraction to pick the most relevant sentences.
+ * Generates 2-3 concise bullet points summarizing an article.
+ * Designed for weekly meeting presentations: brief and actionable.
  */
 function generateBulletPoints(item, contentLines) {
   const title = (item.title || '').toLowerCase();
+  const source = item.source || 'fuente desconocida';
   const allText = contentLines.length > 0
     ? contentLines.join(' ')
     : (item.description || '');
 
   if (!allText || allText.length < 20) {
-    return [`Noticia de ${item.source || 'fuente desconocida'}: ${item.title || ''}`];
+    const cleanTitle = (item.title || '').replace(/ - [^-]+$/, '').trim();
+    return [`${cleanTitle} (Fuente: ${source}). No se pudo extraer contenido del articulo.`];
   }
 
-  // Split into sentences
+  // Split into sentences, filter noise
   const sentences = allText
     .replace(/\s+/g, ' ')
     .split(/(?<=[.!?])\s+/)
     .map(s => s.trim())
-    .filter(s => s.length > 20 && s.length < 300);
+    .filter(s => {
+      if (s.length < 25 || s.length > 350) return false;
+      const lower = s.toLowerCase();
+      // Filter out noise: navigation, cookies, ads, unrelated content
+      const noise = ['cookie', 'suscri', 'newsletter', 'copyright', 'política de privacidad',
+        'iniciar sesión', 'regístrate', 'compartir', 'comentario', 'más noticias',
+        'versión estenográfica', 'conferencia de prensa', 'redes sociales',
+        'twitter', 'facebook', 'instagram', 'desconfianza', 'policía',
+        'bicentenario', 'natalicio', 'certificados agrarios', 'becas',
+        'ver también', 'lee también', 'te puede interesar', 'publicidad',
+        'todos los derechos', 'aviso legal', 'mapa del sitio',
+        'pensión', 'bienestar', 'alimentación para', 'sembrando vida',
+        'adultos mayores', 'beca', 'jóvenes construyendo'];
+      if (noise.some(n => lower.includes(n))) return false;
+      return true;
+    });
 
   if (sentences.length === 0) {
-    return contentLines.length > 0
-      ? contentLines.slice(0, 3)
-      : [allText.substring(0, 200)];
+    const cleanTitle = (item.title || '').replace(/ - [^-]+$/, '').trim();
+    return [`${cleanTitle} (Fuente: ${source}).`];
   }
 
-  // Score each sentence by keyword relevance
+  // Score each sentence by relevance to water sector business
   const scored = sentences.map(sentence => {
     const lower = sentence.toLowerCase();
     let score = 0;
 
+    // Core water sector keywords
     for (const kw of HIGH_RELEVANCE_KEYWORDS) {
-      if (lower.includes(kw.toLowerCase())) score += 2;
+      if (lower.includes(kw.toLowerCase())) score += 3;
     }
 
-    // Boost sentences that relate to the title
+    // Extra weight for business-actionable content
+    const actionable = ['obligación', 'plazo', 'vigencia', 'requisito', 'sanción',
+      'multa', 'prórrog', 'concesión', 'permiso', 'autorización', 'empresa',
+      'industria', 'sector privado', 'usuario', 'titular'];
+    for (const a of actionable) {
+      if (lower.includes(a)) score += 2;
+    }
+
+    // Boost sentences with the title's key terms
     const titleWords = title.split(/\s+/).filter(w => w.length > 4);
     for (const tw of titleWords) {
       if (lower.includes(tw)) score += 1;
     }
 
-    // Slight boost for sentences with numbers (dates, amounts, stats)
-    if (/\d+/.test(sentence)) score += 1;
+    // Penalize very generic/short sentences
+    if (sentence.length < 40) score -= 2;
 
-    // Slight penalty for very short sentences
-    if (sentence.length < 40) score -= 1;
+    // Heavily penalize sentences with zero water-related keywords
+    if (score === 0) score = -5;
 
     return { sentence, score };
   });
 
-  // Sort by score, take top 3-5
+  // Sort by score, take top 3 most relevant
   scored.sort((a, b) => b.score - a.score);
-  const selected = scored.slice(0, 4).map(s => s.sentence);
 
-  // If we got fewer than 2, pad with first content lines
-  if (selected.length < 2 && contentLines.length > 0) {
-    for (const line of contentLines) {
-      if (selected.length >= 3) break;
-      if (!selected.includes(line)) selected.push(line);
-    }
-  }
+  // Only keep sentences with positive relevance score
+  const relevant = scored.filter(s => s.score > 0);
+  const selected = (relevant.length >= 2 ? relevant : scored)
+    .slice(0, 3)
+    .map(s => s.sentence);
 
-  return selected;
+  // Truncate each to ~180 chars for brevity
+  return selected.map(s => s.length > 180 ? s.substring(0, 177) + '...' : s);
 }
 
 function generateSummaryPoints(scoredNews) {
