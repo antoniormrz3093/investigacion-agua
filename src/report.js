@@ -1,7 +1,7 @@
 import { writeFile, mkdir } from 'fs/promises';
 import { join } from 'path';
 
-export async function generateReport(newsItems, outputDir, weekly = null) {
+export async function generateReport(newsItems, outputDir, weekly = null, scoredTop5 = null) {
   const now = new Date();
   const dateStr = now.toISOString().split('T')[0];
   const fileName = `reporte-agua-${dateStr}.html`;
@@ -20,7 +20,8 @@ export async function generateReport(newsItems, outputDir, weekly = null) {
     grouped[key].sort((a, b) => b.date - a.date);
   }
 
-  const top5 = [...newsItems]
+  // Use scored top5 if provided, otherwise fallback to date-sorted
+  const top5 = scoredTop5 || [...newsItems]
     .sort((a, b) => b.date - a.date)
     .slice(0, 5);
 
@@ -44,6 +45,12 @@ function buildHtml(dateStr, now, top5, grouped, total, weekly) {
     const source = item.source || item.fuente || '';
     const desc = item.description || item.descripcion || '';
     const date = item.date instanceof Date ? item.date : new Date(item.fecha || Date.now());
+    const contentLines = item.contentLines || [];
+
+    const contentHtml = contentLines.length > 0
+      ? `<div class="article-excerpt">${contentLines.map(line => `<p>${esc(line)}</p>`).join('\n')}</div>`
+      : `<p>${esc(desc.substring(0, 250))}</p>`;
+
     return `
     <div class="news-card">
       <div class="news-meta">
@@ -52,7 +59,7 @@ function buildHtml(dateStr, now, top5, grouped, total, weekly) {
         ${item.score ? `<span class="relevance-badge">Relevancia: ${item.score}</span>` : ''}
       </div>
       <h3><a href="${esc(link)}" target="_blank">${esc(title)}</a></h3>
-      <p>${esc(desc.substring(0, 250))}</p>
+      ${contentHtml}
     </div>`;
   };
 
@@ -227,6 +234,19 @@ function buildHtml(dateStr, now, top5, grouped, total, weekly) {
     .news-card h3 a { color: #2d3748; text-decoration: none; }
     .news-card h3 a:hover { color: #0077b6; text-decoration: underline; }
     .news-card p { color: #718096; font-size: 0.9em; }
+    .article-excerpt {
+      background: #f7fafc;
+      border-left: 3px solid #0077b6;
+      padding: 10px 14px;
+      margin-top: 8px;
+      border-radius: 0 6px 6px 0;
+    }
+    .article-excerpt p {
+      margin-bottom: 4px;
+      font-size: 0.88em;
+      line-height: 1.5;
+    }
+    .article-excerpt p:last-child { margin-bottom: 0; }
 
     /* Weekly / Sobresalientes */
     .weekly-period {

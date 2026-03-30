@@ -19,7 +19,8 @@ src/
     dof.js           # Diario Oficial de la Federacion
   report.js          # Generador de dashboard HTML con tabs
   weekly.js          # Analisis semanal: scoring por relevancia y resumen por temas
-  telegram.js        # Envio de mensajes via Telegram Bot API
+  telegram.js        # Envio de mensajes via Telegram Bot API (multi-destinatario)
+  article-fetcher.js # Extrae primeras 7 lineas de contenido de articulos
 launcher-noticias.bat  # Script lanzador para Task Scheduler (noticias)
 launcher-semanal.bat   # Script lanzador para Task Scheduler (semanal)
 config.json          # Configuracion local (NO versionado, contiene token)
@@ -52,7 +53,8 @@ schtasks /create /tn MonitoreoAguaMexico-Semanal /tr C:\Users\Opus2026\monitoreo
 ## Configuracion
 Copiar `config.example.json` a `config.json` y completar:
 - `telegram.botToken`: Token del bot de Telegram (via @BotFather)
-- `telegram.chatId`: ID del chat destino
+- `telegram.chatIds`: Array de IDs de chat destino (soporta multiples destinatarios)
+- `telegram.chatId`: (legacy) ID unico, se usa como fallback si chatIds no existe
 - `newsDir`: Ruta absoluta donde guardar los JSON de noticias
 - `keywords`: Terminos de busqueda personalizables
 
@@ -60,3 +62,6 @@ Copiar `config.example.json` a `config.json` y completar:
 - DOF requiere desactivar verificacion TLS temporalmente (certificado SSL del sitio con problemas)
 - Google News RSS es la fuente principal (~100 noticias por ejecucion)
 - El scoring de relevancia en weekly.js prioriza: reforma LAN, CONAGUA, obra publica, licitaciones
+- El top 5 diario se ordena por scoring de impacto de negocio (no por fecha)
+- Para cada noticia del top 5 se obtienen las primeras 7 lineas de contenido del articulo
+- Para agregar un destinatario de Telegram: el usuario debe enviar /start al bot, obtener su chatId, y agregarlo al array chatIds en config.json

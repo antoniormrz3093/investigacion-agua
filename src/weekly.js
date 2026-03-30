@@ -105,7 +105,7 @@ export async function loadWeeklySummary(dataDir) {
   };
 }
 
-function calculateRelevanceScore(item) {
+export function calculateRelevanceScore(item) {
   let score = 0;
   const text = `${item.titulo || ''} ${item.descripcion || ''}`.toLowerCase();
 

@@ -3,7 +3,8 @@
   "newsDir": "C:\\ruta\\a\\tu\\carpeta\\de\\informacion",
   "telegram": {
     "botToken": "TU_TOKEN_AQUI",
-    "chatId": "TU_CHAT_ID_AQUI"
+    "chatId": "TU_CHAT_ID_AQUI",
+    "chatIds": ["TU_CHAT_ID_AQUI"]
   },
   "keywords": [
     "agua México reforma",

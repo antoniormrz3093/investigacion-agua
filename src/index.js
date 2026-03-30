@@ -9,6 +9,8 @@ import { fetchDofNews } from './sources/dof.js';
 import { generateReport } from './report.js';
 import { loadWeeklySummary } from './weekly.js';
 import { sendTelegramSummary } from './telegram.js';
+import { calculateRelevanceScore } from './weekly.js';
+import { fetchTopArticlesContent } from './article-fetcher.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..');
@@ -47,9 +49,10 @@ async function main() {
     const reportMeta = await generateReport([], outputDir, weekly);
 
     console.log('\n[3/3] Enviando resumen semanal por Telegram...');
+    const chatIds = config.telegram.chatIds || [config.telegram.chatId];
     await sendTelegramSummary(
       config.telegram.botToken,
-      config.telegram.chatId,
+      chatIds,
       weekly.highlights.slice(0, 5),
       { ...reportMeta, totalNews: weekly.allNews.length, isWeekly: true },
     );
@@ -90,16 +93,40 @@ async function main() {
     await saveNewsData(allNews, newsDir);
   }
 
-  // Generate dashboard with existing weekly data
-  console.log('\n[4/5] Generando dashboard...');
-  const weekly = await loadWeeklySummary(dataDir);
-  const reportMeta = await generateReport(allNews, outputDir, weekly);
+  // Score news by business relevance
+  console.log('\n[4/7] Calculando relevancia de negocio...');
+  for (const item of allNews) {
+    item.score = calculateRelevanceScore({
+      titulo: item.title,
+      descripcion: item.description,
+      fuente: item.source,
+      origen: item.origin,
+    });
+  }
+  allNews.sort((a, b) => b.score - a.score);
+  const top5 = allNews.slice(0, 5);
+  console.log(`  Top 5 por impacto (scores: ${top5.map(n => n.score).join(', ')})`);
 
-  console.log('\n[5/5] Enviando notificacion por Telegram...');
+  // Fetch article content for top 5
+  console.log('\n[5/7] Obteniendo contenido de articulos top 5...');
+  const articleContent = await fetchTopArticlesContent(top5);
+  for (const item of top5) {
+    const url = item.link || '';
+    item.contentLines = articleContent.get(url) || [];
+  }
+  console.log(`  Articulos con contenido: ${top5.filter(n => n.contentLines.length > 0).length}/5`);
+
+  // Generate dashboard with existing weekly data
+  console.log('\n[6/7] Generando dashboard...');
+  const weekly = await loadWeeklySummary(dataDir);
+  const reportMeta = await generateReport(allNews, outputDir, weekly, top5);
+
+  console.log('\n[7/7] Enviando notificacion por Telegram...');
+  const chatIds = config.telegram.chatIds || [config.telegram.chatId];
   await sendTelegramSummary(
     config.telegram.botToken,
-    config.telegram.chatId,
-    reportMeta.top5,
+    chatIds,
+    top5,
     reportMeta,
   );
 
