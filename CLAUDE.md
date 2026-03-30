@@ -20,6 +20,8 @@ src/
   report.js          # Generador de dashboard HTML con tabs
   weekly.js          # Analisis semanal: scoring por relevancia y resumen por temas
   telegram.js        # Envio de mensajes via Telegram Bot API
+launcher-noticias.bat  # Script lanzador para Task Scheduler (noticias)
+launcher-semanal.bat   # Script lanzador para Task Scheduler (semanal)
 config.json          # Configuracion local (NO versionado, contiene token)
 config.example.json  # Template de configuracion
 data/                # Noticias acumuladas para resumen semanal (NO versionado)
@@ -34,8 +36,18 @@ node src/index.js weekly   # Genera resumen semanal de sobresalientes
 ```
 
 ## Tareas programadas (Windows Task Scheduler)
-- `MonitoreoAguaMexico-Noticias`: cada 3 dias a las 8:00 AM
-- `MonitoreoAguaMexico-Semanal`: cada miercoles a las 8:00 AM
+- `MonitoreoAguaMexico-Noticias`: cada 3 dias a las 8:00 AM — usa `launcher-noticias.bat`
+- `MonitoreoAguaMexico-Semanal`: cada miercoles a las 8:00 AM — usa `launcher-semanal.bat`
+
+Los launchers resuelven el problema de rutas con espacios en `schtasks`. Los archivos .bat
+reales que usan las tareas viven en `C:\Users\Opus2026\` (fuera del repo) pero son identicos
+a los launchers versionados aqui.
+
+Para recrear las tareas en un nuevo entorno (requiere estar logueado como el usuario destino):
+```
+schtasks /create /tn MonitoreoAguaMexico-Noticias /tr C:\Users\Opus2026\monitoreo-agua-noticias.bat /sc daily /mo 3 /st 08:00 /ru USUARIO /rp CONTRASEÑA /f
+schtasks /create /tn MonitoreoAguaMexico-Semanal /tr C:\Users\Opus2026\monitoreo-agua-semanal.bat /sc weekly /d WED /st 08:00 /ru USUARIO /rp CONTRASEÑA /f
+```
 
 ## Configuracion
 Copiar `config.example.json` a `config.json` y completar:
