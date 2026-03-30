@@ -10,7 +10,8 @@ import { generateReport } from './report.js';
 import { loadWeeklySummary, generateWeeklySummary, loadAllWeeklySummaries } from './weekly.js';
 import { sendTelegramSummary } from './telegram.js';
 import { calculateRelevanceScore } from './weekly.js';
-import { fetchTopArticlesContent } from './article-fetcher.js';
+import { fetchTopArticlesContent, resolveArticleUrls } from './article-fetcher.js';
+import { exportWeeklyArticlesToWord } from './word-export.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..');
@@ -40,22 +41,50 @@ async function main() {
   let allNews = [];
 
   if (mode === 'weekly') {
-    // Weekly mode: generate structured summary with content extraction
-    console.log('[1/4] Generando resumen semanal estructurado...');
-    const weeklySummary = await generateWeeklySummary(dataDir);
-    console.log(`  Noticias de la semana: ${weeklySummary.totalNoticias || 0}`);
-    console.log(`  Top 5 analizadas: ${weeklySummary.top5Analysis?.length || 0}`);
+    const { loadWeeklySummary: loadWS } = await import('./weekly.js');
 
-    console.log('\n[2/4] Cargando historial de semanas anteriores...');
+    // Step 1: Load weekly news and get top 5
+    console.log('[1/6] Cargando noticias acumuladas de la semana...');
+    const summary = await loadWS(dataDir);
+    const top5 = summary.highlights.slice(0, 5);
+    console.log(`  Noticias de la semana: ${summary.totalWeeklyNews}`);
+    console.log(`  Top 5 seleccionadas por impacto`);
+
+    // Step 2: Resolve Google News URLs
+    console.log('\n[2/6] Resolviendo URLs reales de articulos...');
+    const resolvedUrls = await resolveArticleUrls(top5);
+
+    // Step 3: Generate Word documents with full article text
+    const infoDir = config.newsDir ? resolve(config.newsDir) : resolve(ROOT, 'output', 'articulos');
+    const weekId = new Date().getFullYear() + '-S' + String(Math.ceil((Math.floor((new Date() - new Date(new Date().getFullYear(), 0, 1)) / 86400000) + 1) / 7)).padStart(2, '0');
+
+    console.log('\n[3/6] Generando documentos Word con contenido completo...');
+    // Build analysis objects for word export
+    const top5ForExport = top5.map((item, idx) => ({
+      rank: idx + 1,
+      titulo: item.title,
+      enlace: item.link,
+      fuente: item.source,
+      fecha: item.date instanceof Date ? item.date.toISOString().split('T')[0] : '',
+      score: item.score,
+      categoria: '',
+    }));
+    const wordResults = await exportWeeklyArticlesToWord(top5ForExport, weekId, resolvedUrls, infoDir);
+
+    // Step 4: Generate structured summary from Word text
+    console.log('\n[4/6] Generando resumen estructurado desde texto completo...');
+    const weeklySummary = await generateWeeklySummary(dataDir, wordResults);
+    console.log(`  Top 5 con resumen: ${weeklySummary.top5Analysis?.length || 0}`);
+
+    // Step 5: Generate dashboard
+    console.log('\n[5/6] Generando dashboard con historial semanal...');
     const allWeeklySummaries = await loadAllWeeklySummaries(dataDir);
     console.log(`  Semanas en historial: ${allWeeklySummaries.length}`);
-
-    console.log('\n[3/4] Generando dashboard con historial semanal...');
     const reportMeta = await generateReport([], outputDir, null, null, allWeeklySummaries);
 
-    console.log('\n[4/4] Enviando resumen semanal por Telegram...');
+    // Step 6: Send Telegram
+    console.log('\n[6/6] Enviando resumen semanal por Telegram...');
     const chatIds = config.telegram.chatIds || [config.telegram.chatId];
-    // Build top5 with contentLines for Telegram
     const top5ForTelegram = (weeklySummary.top5Analysis || []).map(a => ({
       title: a.titulo,
       link: a.enlace,
@@ -72,6 +101,7 @@ async function main() {
 
     console.log('\n=== Resumen semanal completado ===');
     console.log(`Dashboard: ${reportMeta.filePath}`);
+    console.log(`Documentos Word: ${infoDir}\\Semana-${weekId}`);
     return;
   }
 

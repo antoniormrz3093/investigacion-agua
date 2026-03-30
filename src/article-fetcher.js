@@ -137,3 +137,31 @@ export async function fetchTopArticlesContent(articles) {
   await Promise.all(fetches);
   return results;
 }
+
+/**
+ * Resolves Google News URLs to real article URLs for a list of articles.
+ * Returns a Map of original URL -> resolved real URL.
+ */
+export async function resolveArticleUrls(articles) {
+  const resolved = new Map();
+
+  const fetches = articles.map(async (item) => {
+    const url = item.link || item.enlace || '';
+    if (!url) return;
+
+    if (isGoogleNewsUrl(url)) {
+      const title = item.title || item.titulo || '';
+      const source = item.source || item.fuente || '';
+      const realUrl = await resolveGoogleNewsUrl(title, source);
+      if (realUrl) {
+        resolved.set(url, realUrl);
+        console.log(`    Resuelto: ${source} -> ${realUrl.substring(0, 80)}...`);
+      }
+    } else {
+      resolved.set(url, url);
+    }
+  });
+
+  await Promise.all(fetches);
+  return resolved;
+}

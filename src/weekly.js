@@ -107,12 +107,14 @@ export async function loadWeeklySummary(dataDir) {
 
 /**
  * Generates a full structured weekly summary:
- * - Fetches content for top 5
- * - Generates bullet points per article
  * - Categorizes each article
+ * - Generates bullet points from full article text (provided by word export)
  * - Saves to persistent storage
+ *
+ * @param {string} dataDir - data directory
+ * @param {Array} wordResults - results from exportWeeklyArticlesToWord (contains rawText per article)
  */
-export async function generateWeeklySummary(dataDir) {
+export async function generateWeeklySummary(dataDir, wordResults = []) {
   const summary = await loadWeeklySummary(dataDir);
 
   if (summary.highlights.length === 0) {
@@ -122,16 +124,13 @@ export async function generateWeeklySummary(dataDir) {
   // Take top 5 highlights
   const top5 = summary.highlights.slice(0, 5);
 
-  // Fetch article content
-  console.log('  Obteniendo contenido de articulos top 5 semanal...');
-  const contentMap = await fetchTopArticlesContent(top5);
-
-  // Build structured analysis for each
+  // Build structured analysis using full text from Word docs
   const top5Analysis = top5.map((item, idx) => {
-    const url = item.link || '';
-    const contentLines = contentMap.get(url) || [];
     const category = classifyArticle(item);
-    const bulletPoints = generateBulletPoints(item, contentLines);
+    // Use full raw text from Word export for better summaries
+    const wordData = wordResults.find(w => w.rank === idx + 1);
+    const fullText = wordData?.rawText || '';
+    const bulletPoints = generateBulletPoints(item, fullText);
 
     return {
       rank: idx + 1,
@@ -142,8 +141,9 @@ export async function generateWeeklySummary(dataDir) {
       score: item.score,
       categoria: category.name,
       categoriaIcon: category.icon,
-      contentLines,
+      contentLines: fullText ? fullText.split('\n\n').slice(0, 7) : [],
       bulletPoints,
+      wordFile: wordData?.fileName || null,
     };
   });
 
@@ -246,12 +246,14 @@ function classifyArticle(item) {
 /**
  * Generates 2-3 concise bullet points summarizing an article.
  * Designed for weekly meeting presentations: brief and actionable.
+ * @param {object} item - news item
+ * @param {string} fullText - full article text from Word export
  */
-function generateBulletPoints(item, contentLines) {
+function generateBulletPoints(item, fullText) {
   const title = (item.title || '').toLowerCase();
   const source = item.source || 'fuente desconocida';
-  const allText = contentLines.length > 0
-    ? contentLines.join(' ')
+  const allText = (typeof fullText === 'string' && fullText.length > 20)
+    ? fullText
     : (item.description || '');
 
   if (!allText || allText.length < 20) {
