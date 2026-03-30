@@ -7,7 +7,7 @@ import { fetchGoogleNews } from './sources/google-news.js';
 import { fetchConaguaNews } from './sources/conagua.js';
 import { fetchDofNews } from './sources/dof.js';
 import { generateReport } from './report.js';
-import { loadWeeklySummary } from './weekly.js';
+import { loadWeeklySummary, generateWeeklySummary, loadAllWeeklySummaries } from './weekly.js';
 import { sendTelegramSummary } from './telegram.js';
 import { calculateRelevanceScore } from './weekly.js';
 import { fetchTopArticlesContent } from './article-fetcher.js';
@@ -40,21 +40,34 @@ async function main() {
   let allNews = [];
 
   if (mode === 'weekly') {
-    // Weekly mode: generate highlights from accumulated data
-    console.log('[1/3] Cargando noticias acumuladas de la semana...');
-    const weekly = await loadWeeklySummary(dataDir);
-    console.log(`  Noticias de la semana: ${weekly.allNews.length}`);
+    // Weekly mode: generate structured summary with content extraction
+    console.log('[1/4] Generando resumen semanal estructurado...');
+    const weeklySummary = await generateWeeklySummary(dataDir);
+    console.log(`  Noticias de la semana: ${weeklySummary.totalNoticias || 0}`);
+    console.log(`  Top 5 analizadas: ${weeklySummary.top5Analysis?.length || 0}`);
 
-    console.log('\n[2/3] Generando dashboard con pestana Sobresalientes...');
-    const reportMeta = await generateReport([], outputDir, weekly);
+    console.log('\n[2/4] Cargando historial de semanas anteriores...');
+    const allWeeklySummaries = await loadAllWeeklySummaries(dataDir);
+    console.log(`  Semanas en historial: ${allWeeklySummaries.length}`);
 
-    console.log('\n[3/3] Enviando resumen semanal por Telegram...');
+    console.log('\n[3/4] Generando dashboard con historial semanal...');
+    const reportMeta = await generateReport([], outputDir, null, null, allWeeklySummaries);
+
+    console.log('\n[4/4] Enviando resumen semanal por Telegram...');
     const chatIds = config.telegram.chatIds || [config.telegram.chatId];
+    // Build top5 with contentLines for Telegram
+    const top5ForTelegram = (weeklySummary.top5Analysis || []).map(a => ({
+      title: a.titulo,
+      link: a.enlace,
+      source: a.fuente,
+      score: a.score,
+      contentLines: a.bulletPoints,
+    }));
     await sendTelegramSummary(
       config.telegram.botToken,
       chatIds,
-      weekly.highlights.slice(0, 5),
-      { ...reportMeta, totalNews: weekly.allNews.length, isWeekly: true },
+      top5ForTelegram,
+      { ...reportMeta, totalNews: weeklySummary.totalNoticias || 0, isWeekly: true },
     );
 
     console.log('\n=== Resumen semanal completado ===');
@@ -116,10 +129,10 @@ async function main() {
   }
   console.log(`  Articulos con contenido: ${top5.filter(n => n.contentLines.length > 0).length}/5`);
 
-  // Generate dashboard with existing weekly data
+  // Generate dashboard with weekly history
   console.log('\n[6/7] Generando dashboard...');
-  const weekly = await loadWeeklySummary(dataDir);
-  const reportMeta = await generateReport(allNews, outputDir, weekly, top5);
+  const allWeeklySummaries = await loadAllWeeklySummaries(dataDir);
+  const reportMeta = await generateReport(allNews, outputDir, null, top5, allWeeklySummaries);
 
   console.log('\n[7/7] Enviando notificacion por Telegram...');
   const chatIds = config.telegram.chatIds || [config.telegram.chatId];
